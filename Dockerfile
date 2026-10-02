@@ -10,13 +10,14 @@ RUN apt-get update && \
     unzip \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Deno
+# Install Deno for yt-dlp JavaScript support
 RUN curl -fsSL https://deno.land/install.sh | sh
 
 ENV DENO_INSTALL=/root/.deno
 ENV PATH=/root/.deno/bin:$PATH
 
-# Install latest yt-dlp
+# Install yt-dlp with all default optional dependencies.
+# curl_cffi provides browser impersonation support used by TikTok.
 RUN pip3 install --break-system-packages --no-cache-dir -U "yt-dlp[default]"
 
 WORKDIR /app
