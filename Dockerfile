@@ -1,32 +1,72 @@
 FROM node:22-bookworm-slim
 
-# Install Python, FFmpeg and required packages
+# ----------------------------------------
+# Install system packages
+# ----------------------------------------
+
 RUN apt-get update && \
     apt-get install -y \
     python3 \
     python3-pip \
     ffmpeg \
-    ca-certificates \
     curl \
+    ca-certificates \
+    unzip \
     && rm -rf /var/lib/apt/lists/*
 
-# Install latest yt-dlp
-RUN pip3 install --break-system-packages --no-cache-dir -U yt-dlp
+# ----------------------------------------
+# Install Deno
+# Deno is recommended by yt-dlp for
+# YouTube JavaScript challenge solving
+# ----------------------------------------
 
+RUN curl -fsSL https://deno.land/install.sh | sh
+
+ENV DENO_INSTALL="/root/.deno"
+ENV PATH="/root/.deno/bin:$PATH"
+
+# ----------------------------------------
+# Install yt-dlp with EJS support
+# ----------------------------------------
+
+RUN pip3 install \
+    --break-system-packages \
+    --no-cache-dir \
+    -U \
+    "yt-dlp[default]"
+
+# ----------------------------------------
 # Application directory
+# ----------------------------------------
+
 WORKDIR /app
 
-# Copy package files
+# ----------------------------------------
+# Copy Node package files
+# ----------------------------------------
+
 COPY package*.json ./
 
+# ----------------------------------------
 # Install Node dependencies
+# ----------------------------------------
+
 RUN npm install --omit=dev
 
+# ----------------------------------------
 # Copy application
+# ----------------------------------------
+
 COPY server.js ./
 
-# Render uses the PORT environment variable
+# ----------------------------------------
+# Render port
+# ----------------------------------------
+
 EXPOSE 10000
 
-# Start server
+# ----------------------------------------
+# Start application
+# ----------------------------------------
+
 CMD ["node", "server.js"]
