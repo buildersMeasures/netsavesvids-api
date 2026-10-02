@@ -481,15 +481,10 @@ app.get("/video", async (req, res) => {
   // ----------------------------------------------
 
   const ytResult =
-    await runYtDlp(
-      url,
-      tiktok
-        ? [
-            "--impersonate",
-            "chrome"
-          ]
-        : []
-    );
+  await runYtDlp(
+    url,
+    []
+  );
 
 
   // ----------------------------------------------
