@@ -18,7 +18,7 @@ const limiter = rateLimit({
     status: "error",
     error: "Too many requests. Please try again later."
   }
-});
+}); 
 
 app.use("/video", limiter);
 
