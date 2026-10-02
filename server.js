@@ -291,19 +291,20 @@ app.listen(
     );
   }
 );
-app.get("/version", (req, res) => {
+app.get("/health", (req, res) => {
   const check = spawn("yt-dlp", ["--version"]);
 
-  let output = "";
+  let version = "";
 
   check.stdout.on("data", data => {
-    output += data.toString();
+    version += data.toString();
   });
 
   check.on("close", code => {
     res.json({
-      yt_dlp: output.trim(),
-      exit_code: code
+      status: "ok",
+      yt_dlp: version.trim(),
+      yt_dlp_exit_code: code
     });
   });
 });
