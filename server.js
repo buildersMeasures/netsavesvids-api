@@ -6,20 +6,16 @@ const { spawn } = require("child_process");
 const app = express();
 
 const PORT = process.env.PORT || 10000;
-const POT_PORT = 4416;
 
-// ----------------------------------------
+// --------------------------------------------------
 // CORS
-// ----------------------------------------
-
+// --------------------------------------------------
 app.use(cors());
 
-app.use(express.json());
-
-// ----------------------------------------
-// Rate limiting
-// ----------------------------------------
-
+// --------------------------------------------------
+// Rate Limiting
+// 10 requests per minute per IP
+// --------------------------------------------------
 const limiter = rateLimit({
   windowMs: 60 * 1000,
   max: 10,
@@ -27,284 +23,249 @@ const limiter = rateLimit({
   legacyHeaders: false,
   message: {
     status: "error",
-    error: "Too many requests. Try again later."
+    error: "Too many requests. Please try again later."
   }
 });
 
-app.use(limiter);
+app.use("/video", limiter);
 
-// ----------------------------------------
-// Start BgUtils PO Token provider
-// ----------------------------------------
-
-function startPotProvider() {
-  const potProvider = spawn(
-    "bgutil-ytdlp-pot-provider",
-    [
-      "--port",
-      String(POT_PORT),
-      "--host",
-      "127.0.0.1"
-    ],
-    {
-      stdio: ["ignore", "pipe", "pipe"]
-    }
-  );
-
-  potProvider.stdout.on("data", (data) => {
-    console.log(
-      "[PO Token Provider]",
-      data.toString().trim()
-    );
-  });
-
-  potProvider.stderr.on("data", (data) => {
-    console.error(
-      "[PO Token Provider]",
-      data.toString().trim()
-    );
-  });
-
-  potProvider.on("error", (error) => {
-    console.error(
-      "PO Token provider failed to start:",
-      error.message
-    );
-  });
-
-  potProvider.on("close", (code) => {
-    console.log(
-      `PO Token provider stopped with code ${code}`
-    );
-  });
-
-  return potProvider;
-}
-
-// ----------------------------------------
-// Health check
-// ----------------------------------------
-
-app.get("/health", (req, res) => {
-  res.json({
-    status: "ok"
-  });
-});
-
-// ----------------------------------------
-// Main endpoint
-// ----------------------------------------
-
+// --------------------------------------------------
+// HOME
+// --------------------------------------------------
 app.get("/", (req, res) => {
   res.json({
-    status: "online",
-    service: "NetSaves Downloader API"
+    status: "success",
+    service: "NetSaves API",
+    message: "NetSaves downloader backend is online."
   });
 });
 
-// ----------------------------------------
-// URL validation
-// ----------------------------------------
+// --------------------------------------------------
+// HEALTH CHECK
+// --------------------------------------------------
+app.get("/health", (req, res) => {
+  res.json({
+    status: "success"
+  });
+});
 
-function validateVideoUrl(videoUrl) {
-  try {
-    const parsed = new URL(videoUrl);
+// --------------------------------------------------
+// VERSION / SERVER DIAGNOSTICS
+// --------------------------------------------------
+app.get("/version", (req, res) => {
+  getCommandOutput("yt-dlp", ["--version"], (ytDlpResult) => {
+    getCommandOutput("ffmpeg", ["-version"], (ffmpegResult) => {
+      let ffmpegVersion = "";
 
-    if (
-      parsed.protocol !== "http:" &&
-      parsed.protocol !== "https:"
-    ) {
-      return false;
-    }
-
-    return true;
-
-  } catch {
-    return false;
-  }
-}
-
-// ----------------------------------------
-// Run yt-dlp
-// ----------------------------------------
-
-function getVideoInfo(videoUrl) {
-  return new Promise((resolve, reject) => {
-
-    const args = [
-      "--no-warnings",
-      "--no-playlist",
-      "--dump-single-json",
-      "--skip-download",
-
-      // Use the BgUtils PO Token provider
-      "--extractor-args",
-      "youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416",
-
-      // Use Deno for YouTube JavaScript challenges
-      "--js-runtimes",
-      "deno",
-
-      // Preferred downloadable format
-      "--format",
-      "best[ext=mp4][acodec!=none][vcodec!=none]/best[ext=mp4]/best",
-
-      videoUrl
-    ];
-
-    const ytdlp = spawn("yt-dlp", args);
-
-    let output = "";
-    let errorOutput = "";
-
-    ytdlp.stdout.on("data", (data) => {
-      output += data.toString();
-    });
-
-    ytdlp.stderr.on("data", (data) => {
-      errorOutput += data.toString();
-    });
-
-    ytdlp.on("error", (error) => {
-      reject(error.message);
-    });
-
-    ytdlp.on("close", (code) => {
-
-      if (code !== 0) {
-
-        return reject(
-          errorOutput.trim() ||
-          "yt-dlp failed to process this URL."
+      if (ffmpegResult.output) {
+        const match = ffmpegResult.output.match(
+          /ffmpeg version\s+([^\s]+)/
         );
-      }
 
-      try {
-
-        const data = JSON.parse(output);
-
-        if (!data.url) {
-
-          return reject(
-            "No downloadable video format was found."
-          );
+        if (match) {
+          ffmpegVersion = match[1];
         }
-
-        resolve({
-          title: data.title || "Video",
-          thumbnail: data.thumbnail || "",
-          duration: data.duration || 0,
-          uploader: data.uploader || "",
-          webpage_url: data.webpage_url || videoUrl,
-          download_url: data.url,
-          ext: data.ext || "mp4",
-          filesize:
-            data.filesize ||
-            data.filesize_approx ||
-            null
-        });
-
-      } catch (error) {
-
-        reject(
-          "Failed to parse yt-dlp output."
-        );
       }
+
+      res.json({
+        status: "success",
+
+        yt_dlp: {
+          installed: ytDlpResult.code === 0,
+          version: ytDlpResult.output.trim(),
+          exit_code: ytDlpResult.code
+        },
+
+        ffmpeg: {
+          installed: ffmpegResult.code === 0,
+          version: ffmpegVersion,
+          exit_code: ffmpegResult.code
+        }
+      });
     });
   });
-}
+});
 
-// ----------------------------------------
-// /video
-// ----------------------------------------
+// --------------------------------------------------
+// VIDEO DOWNLOADER
+// --------------------------------------------------
+app.get("/video", (req, res) => {
+  const url = req.query.url;
 
-app.get("/video", async (req, res) => {
-
-  const videoUrl = req.query.url;
-
-  if (!videoUrl) {
-
+  // Check URL
+  if (!url) {
     return res.status(400).json({
       status: "error",
-      error: "Missing required parameter: url"
+      error: "Missing video URL. Use /video?url=YOUR_VIDEO_URL"
     });
   }
 
-  if (!validateVideoUrl(videoUrl)) {
+  // Basic URL validation
+  let parsedUrl;
 
+  try {
+    parsedUrl = new URL(url);
+  } catch (error) {
     return res.status(400).json({
       status: "error",
       error: "Invalid video URL."
     });
   }
 
-  try {
-
-    console.log(
-      "Processing video:",
-      videoUrl
-    );
-
-    const result =
-      await getVideoInfo(videoUrl);
-
-    res.json({
-      status: "success",
-      ...result
-    });
-
-  } catch (error) {
-
-    console.error(
-      "yt-dlp error:",
-      error
-    );
-
-    res.status(500).json({
+  // Only allow HTTP/HTTPS URLs
+  if (
+    parsedUrl.protocol !== "http:" &&
+    parsedUrl.protocol !== "https:"
+  ) {
+    return res.status(400).json({
       status: "error",
-      error: error.toString()
+      error: "Only HTTP and HTTPS URLs are supported."
     });
   }
+
+  // ------------------------------------------------
+  // yt-dlp arguments
+  // ------------------------------------------------
+  const args = [
+    "--dump-single-json",
+    "--no-warnings",
+    "--no-playlist",
+    "--skip-download",
+
+    // Use Deno for YouTube JavaScript challenges
+    "--js-runtimes",
+    "deno",
+
+    url
+  ];
+
+  // ------------------------------------------------
+  // Run yt-dlp
+  // ------------------------------------------------
+  const process = spawn("yt-dlp", args);
+
+  let stdout = "";
+  let stderr = "";
+
+  process.stdout.on("data", (data) => {
+    stdout += data.toString();
+  });
+
+  process.stderr.on("data", (data) => {
+    stderr += data.toString();
+  });
+
+  process.on("error", (error) => {
+    return res.status(500).json({
+      status: "error",
+      error: `Failed to start yt-dlp: ${error.message}`
+    });
+  });
+
+  process.on("close", (code) => {
+    // ------------------------------------------------
+    // yt-dlp failed
+    // ------------------------------------------------
+    if (code !== 0) {
+      return res.status(500).json({
+        status: "error",
+        error: stderr.trim() || "yt-dlp failed to process the video.",
+        exit_code: code
+      });
+    }
+
+    // ------------------------------------------------
+    // Parse yt-dlp JSON
+    // ------------------------------------------------
+    try {
+      const data = JSON.parse(stdout);
+
+      // Return useful information to frontend
+      return res.json({
+        status: "success",
+
+        title: data.title || "",
+        uploader: data.uploader || data.channel || "",
+        thumbnail: data.thumbnail || "",
+        duration: data.duration || 0,
+        webpage_url: data.webpage_url || url,
+        platform: data.extractor_key || data.extractor || "",
+
+        formats: Array.isArray(data.formats)
+          ? data.formats
+              .filter((format) => {
+                return (
+                  format.url &&
+                  (
+                    format.ext === "mp4" ||
+                    format.ext === "webm" ||
+                    format.ext === "m4a"
+                  )
+                );
+              })
+              .map((format) => ({
+                url: format.url,
+                format_id: format.format_id || "",
+                ext: format.ext || "",
+                resolution: format.resolution || "",
+                width: format.width || null,
+                height: format.height || null,
+                fps: format.fps || null,
+                filesize: format.filesize || format.filesize_approx || null,
+                tbr: format.tbr || null,
+                vcodec: format.vcodec || "",
+                acodec: format.acodec || ""
+              }))
+          : []
+      });
+
+    } catch (error) {
+      return res.status(500).json({
+        status: "error",
+        error: "yt-dlp returned an invalid response.",
+        details: error.message
+      });
+    }
+  });
 });
 
-// ----------------------------------------
-// Start PO Token provider
-// ----------------------------------------
+// --------------------------------------------------
+// COMMAND HELPER
+// --------------------------------------------------
+function getCommandOutput(command, args, callback) {
+  const process = spawn(command, args);
 
-startPotProvider();
+  let output = "";
+  let errorOutput = "";
 
-// ----------------------------------------
-// Start Express server
-// ----------------------------------------
-
-app.listen(
-  PORT,
-  "0.0.0.0",
-  () => {
-
-    console.log(
-      `NetSaves API running on port ${PORT}`
-    );
-
-    console.log(
-      `PO Token provider expected at 127.0.0.1:${POT_PORT}`
-    );
-  }
-);
-app.get("/health", (req, res) => {
-  const check = spawn("yt-dlp", ["--version"]);
-
-  let version = "";
-
-  check.stdout.on("data", data => {
-    version += data.toString();
+  process.stdout.on("data", (data) => {
+    output += data.toString();
   });
 
-  check.on("close", code => {
-    res.json({
-      status: "ok",
-      yt_dlp: version.trim(),
-      yt_dlp_exit_code: code
+  process.stderr.on("data", (data) => {
+    errorOutput += data.toString();
+  });
+
+  process.on("error", () => {
+    callback({
+      code: -1,
+      output: "",
+      error: errorOutput
     });
   });
+
+  process.on("close", (code) => {
+    callback({
+      code,
+      output: output || errorOutput,
+      error: errorOutput
+    });
+  });
+}
+
+// --------------------------------------------------
+// START SERVER
+// --------------------------------------------------
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`NetSaves API running on port ${PORT}`);
 });
