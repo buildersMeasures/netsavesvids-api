@@ -37,6 +37,30 @@ app.get("/health", (req, res) => {
     status: "success"
   });
 });
+// yt-dlp version
+app.get("/version", (req, res) => {
+  const process = spawn("yt-dlp", ["--version"]);
+
+  let output = "";
+
+  process.stdout.on("data", (data) => {
+    output += data.toString();
+  });
+
+  process.on("close", (code) => {
+    if (code !== 0) {
+      return res.status(500).json({
+        status: "error",
+        error: "Could not determine yt-dlp version."
+      });
+    }
+
+    res.json({
+      status: "success",
+      "yt-dlp": output.trim()
+    });
+  });
+});
 
 // Video
 app.get("/video", (req, res) => {
