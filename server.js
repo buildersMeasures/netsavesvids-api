@@ -93,14 +93,16 @@ app.get("/video", (req, res) => {
   }
 
   const args = [
-    "--dump-single-json",
-    "--no-warnings",
-    "--no-playlist",
-    "--skip-download",
-    "--js-runtimes",
-    "deno",
-    url
-  ];
+  "--dump-single-json",
+  "--no-warnings",
+  "--no-playlist",
+  "--skip-download",
+  "--js-runtimes",
+  "deno",
+  "--impersonate",
+  "chrome",
+  url
+];
 
   const process = spawn("yt-dlp", args);
 
