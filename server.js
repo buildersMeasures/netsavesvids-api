@@ -291,3 +291,19 @@ app.listen(
     );
   }
 );
+app.get("/version", (req, res) => {
+  const check = spawn("yt-dlp", ["--version"]);
+
+  let output = "";
+
+  check.stdout.on("data", data => {
+    output += data.toString();
+  });
+
+  check.on("close", code => {
+    res.json({
+      yt_dlp: output.trim(),
+      exit_code: code
+    });
+  });
+});
