@@ -124,12 +124,13 @@ app.get("/video", (req, res) => {
 
   process.on("close", (code) => {
     if (code !== 0) {
-      return res.status(500).json({
-        status: "error",
-        error: stderr.trim() || "yt-dlp failed.",
-        exit_code: code
-      });
-    }
+  return res.status(500).json({
+    status: "error",
+    error: stderr.trim() || "yt-dlp failed.",
+    exit_code: code,
+    "yt-dlp": "2026.08.19"
+  });
+}
 
     try {
       const data = JSON.parse(stdout);
