@@ -1,7 +1,7 @@
 FROM node:22-bookworm-slim
 
 # ----------------------------------------
-# Install system packages
+# System packages
 # ----------------------------------------
 
 RUN apt-get update && \
@@ -11,13 +11,10 @@ RUN apt-get update && \
     ffmpeg \
     curl \
     ca-certificates \
-    unzip \
     && rm -rf /var/lib/apt/lists/*
 
 # ----------------------------------------
 # Install Deno
-# Deno is recommended by yt-dlp for
-# YouTube JavaScript challenge solving
 # ----------------------------------------
 
 RUN curl -fsSL https://deno.land/install.sh | sh
@@ -26,47 +23,32 @@ ENV DENO_INSTALL="/root/.deno"
 ENV PATH="/root/.deno/bin:$PATH"
 
 # ----------------------------------------
-# Install yt-dlp with EJS support
+# Install yt-dlp + EJS + PO Token provider
 # ----------------------------------------
 
-RUN pip3 install \
+RUN python3 -m pip install \
     --break-system-packages \
     --no-cache-dir \
     -U \
-    "yt-dlp[default]"
+    "yt-dlp[default]" \
+    bgutil-ytdlp-pot-provider
 
 # ----------------------------------------
-# Application directory
+# Application
 # ----------------------------------------
 
 WORKDIR /app
 
-# ----------------------------------------
-# Copy Node package files
-# ----------------------------------------
-
 COPY package*.json ./
 
-# ----------------------------------------
-# Install Node dependencies
-# ----------------------------------------
-
 RUN npm install --omit=dev
-
-# ----------------------------------------
-# Copy application
-# ----------------------------------------
 
 COPY server.js ./
 
 # ----------------------------------------
-# Render port
+# Start
 # ----------------------------------------
 
 EXPOSE 10000
-
-# ----------------------------------------
-# Start application
-# ----------------------------------------
 
 CMD ["node", "server.js"]
