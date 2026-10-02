@@ -17,7 +17,6 @@ app.use(cors());
 
 app.use(express.json({ limit: "1mb" }));
 
-// General API rate limit
 const limiter = rateLimit({
   windowMs: 60 * 1000,
   max: 10,
@@ -47,6 +46,27 @@ const SAVEAPI_YOUTUBE_CREATE_URL =
 const YTDLP_TIMEOUT = 45 * 1000;
 
 // --------------------------------------------------
+// Platform definitions
+// --------------------------------------------------
+
+const SAVEAPI_PLATFORMS = [
+  "instagram",
+  "tiktok",
+  "twitter",
+  "pinterest",
+  "snapchat",
+  "facebook"
+];
+
+const YTDLP_PLATFORMS = [
+  "twitch",
+  "vimeo",
+  "soundcloud",
+  "reddit",
+  "linkedin"
+];
+
+// --------------------------------------------------
 // Helpers
 // --------------------------------------------------
 
@@ -63,45 +83,153 @@ function isValidHttpUrl(value) {
   }
 }
 
-function isTikTokUrl(value) {
+function getHostname(value) {
   try {
-    const url = new URL(value);
-    const host = url.hostname.toLowerCase();
-
-    return (
-      host === "tiktok.com" ||
-      host.endsWith(".tiktok.com")
-    );
+    return new URL(value).hostname.toLowerCase();
   } catch {
-    return false;
+    return "";
   }
 }
 
 // --------------------------------------------------
-// YouTube URL detection
+// Platform detection
 // --------------------------------------------------
 
-function isYouTubeUrl(value) {
-  try {
-    const url = new URL(value);
-    const host = url.hostname.toLowerCase();
+function detectPlatform(value) {
+  const host = getHostname(value);
 
-    return (
-      host === "youtube.com" ||
-      host === "www.youtube.com" ||
-      host === "m.youtube.com" ||
-      host === "music.youtube.com" ||
-      host === "youtu.be" ||
-      host === "www.youtu.be"
-    );
-  } catch {
-    return false;
+  if (!host) {
+    return null;
   }
+
+  // YouTube
+  if (
+    host === "youtube.com" ||
+    host === "www.youtube.com" ||
+    host === "m.youtube.com" ||
+    host === "music.youtube.com" ||
+    host === "youtu.be" ||
+    host === "www.youtu.be"
+  ) {
+    return "youtube";
+  }
+
+  // TikTok
+  if (
+    host === "tiktok.com" ||
+    host === "www.tiktok.com" ||
+    host === "m.tiktok.com" ||
+    host.endsWith(".tiktok.com")
+  ) {
+    return "tiktok";
+  }
+
+  // Instagram
+  if (
+    host === "instagram.com" ||
+    host === "www.instagram.com" ||
+    host === "m.instagram.com"
+  ) {
+    return "instagram";
+  }
+
+  // X / Twitter
+  if (
+    host === "twitter.com" ||
+    host === "www.twitter.com" ||
+    host === "mobile.twitter.com" ||
+    host === "x.com" ||
+    host === "www.x.com" ||
+    host === "mobile.x.com"
+  ) {
+    return "twitter";
+  }
+
+  // Pinterest
+  if (
+    host === "pinterest.com" ||
+    host === "www.pinterest.com" ||
+    host === "pin.it"
+  ) {
+    return "pinterest";
+  }
+
+  // Snapchat
+  if (
+    host === "snapchat.com" ||
+    host === "www.snapchat.com" ||
+    host === "story.snapchat.com"
+  ) {
+    return "snapchat";
+  }
+
+  // Facebook
+  if (
+    host === "facebook.com" ||
+    host === "www.facebook.com" ||
+    host === "m.facebook.com" ||
+    host === "fb.watch"
+  ) {
+    return "facebook";
+  }
+
+  // Twitch
+  if (
+    host === "twitch.tv" ||
+    host === "www.twitch.tv" ||
+    host === "m.twitch.tv"
+  ) {
+    return "twitch";
+  }
+
+  // Vimeo
+  if (
+    host === "vimeo.com" ||
+    host === "www.vimeo.com" ||
+    host === "player.vimeo.com"
+  ) {
+    return "vimeo";
+  }
+
+  // SoundCloud
+  if (
+    host === "soundcloud.com" ||
+    host === "www.soundcloud.com" ||
+    host === "m.soundcloud.com"
+  ) {
+    return "soundcloud";
+  }
+
+  // Reddit
+  if (
+    host === "reddit.com" ||
+    host === "www.reddit.com" ||
+    host === "old.reddit.com" ||
+    host === "new.reddit.com" ||
+    host === "redd.it"
+  ) {
+    return "reddit";
+  }
+
+  // LinkedIn
+  if (
+    host === "linkedin.com" ||
+    host === "www.linkedin.com" ||
+    host === "lnkd.in"
+  ) {
+    return "linkedin";
+  }
+
+  return null;
 }
 
 // --------------------------------------------------
 // YouTube URL validation
 // --------------------------------------------------
+
+function isYouTubeUrl(value) {
+  return detectPlatform(value) === "youtube";
+}
 
 function isSupportedYouTubeUrl(value) {
   try {
@@ -126,11 +254,11 @@ function isSupportedYouTubeUrl(value) {
       }
 
       if (url.pathname.startsWith("/shorts/")) {
-        return url.pathname.split("/")[2].length > 0;
+        return url.pathname.split("/")[2]?.length > 0;
       }
 
       if (url.pathname.startsWith("/embed/")) {
-        return url.pathname.split("/")[2].length > 0;
+        return url.pathname.split("/")[2]?.length > 0;
       }
 
       return false;
@@ -141,6 +269,18 @@ function isSupportedYouTubeUrl(value) {
     return false;
   }
 }
+
+// --------------------------------------------------
+// TikTok validation
+// --------------------------------------------------
+
+function isTikTokUrl(value) {
+  return detectPlatform(value) === "tiktok";
+}
+
+// --------------------------------------------------
+// Resolution helper
+// --------------------------------------------------
 
 function getResolution(format) {
   if (!format) {
@@ -180,6 +320,10 @@ function safeNumber(value) {
     : null;
 }
 
+// --------------------------------------------------
+// SaveAPI error helpers
+// --------------------------------------------------
+
 function getSaveApiError(data, fallbackMessage) {
   if (
     data &&
@@ -192,10 +336,6 @@ function getSaveApiError(data, fallbackMessage) {
   return fallbackMessage;
 }
 
-// --------------------------------------------------
-// SaveAPI error status mapping
-// --------------------------------------------------
-
 function getSaveApiStatusCode(code) {
   switch (code) {
     case "INVALID_URL":
@@ -205,8 +345,6 @@ function getSaveApiStatusCode(code) {
 
     case "MISSING_API_KEY":
     case "INVALID_API_KEY":
-      return 500;
-
     case "KEY_REVOKED":
     case "KEY_EXPIRED":
     case "ACCOUNT_SUSPENDED":
@@ -237,29 +375,43 @@ function getSaveApiStatusCode(code) {
 }
 
 // --------------------------------------------------
-// SaveAPI - TikTok
+// SaveAPI generic resolver
+//
+// Used for:
+// Instagram
+// TikTok
+// X / Twitter
+// Pinterest
+// Snapchat
+// Facebook
 // --------------------------------------------------
 
-async function resolveTikTokWithSaveAPI(tiktokUrl) {
+async function resolveWithSaveAPI(inputUrl, platform) {
   const apiKey = process.env.SAVEAPI_KEY;
 
   if (!apiKey) {
-    throw new Error(
+    const error = new Error(
       "SAVEAPI_KEY is not configured on the server."
     );
+
+    error.code = "MISSING_API_KEY";
+
+    throw error;
   }
 
   const endpoint =
     SAVEAPI_DOWNLOAD_URL +
     "?url=" +
-    encodeURIComponent(tiktokUrl);
+    encodeURIComponent(inputUrl);
 
   const response = await fetch(endpoint, {
     method: "GET",
+
     headers: {
       Authorization: `Bearer ${apiKey}`,
       Accept: "application/json"
     },
+
     signal: AbortSignal.timeout(30000)
   });
 
@@ -268,9 +420,13 @@ async function resolveTikTokWithSaveAPI(tiktokUrl) {
   try {
     data = await response.json();
   } catch {
-    throw new Error(
+    const error = new Error(
       `SaveAPI returned an invalid response (${response.status}).`
     );
+
+    error.code = `HTTP_${response.status}`;
+
+    throw error;
   }
 
   if (!response.ok || data.success === false) {
@@ -282,11 +438,10 @@ async function resolveTikTokWithSaveAPI(tiktokUrl) {
         : `HTTP_${response.status}`;
 
     const errorMessage =
-      data &&
-      data.error &&
-      data.error.message
-        ? data.error.message
-        : "SaveAPI could not resolve this TikTok URL.";
+      getSaveApiError(
+        data,
+        `SaveAPI could not resolve this ${platform} URL.`
+      );
 
     const error = new Error(errorMessage);
 
@@ -297,9 +452,13 @@ async function resolveTikTokWithSaveAPI(tiktokUrl) {
   }
 
   if (!data.success) {
-    throw new Error(
-      "SaveAPI could not resolve this TikTok URL."
+    const error = new Error(
+      `SaveAPI could not resolve this ${platform} URL.`
     );
+
+    error.code = "SAVEAPI_ERROR";
+
+    throw error;
   }
 
   let sourceFormats = [];
@@ -314,6 +473,15 @@ async function resolveTikTokWithSaveAPI(tiktokUrl) {
     data.medias.length > 0
   ) {
     sourceFormats = data.medias;
+  }
+
+  // Some SaveAPI responses expose TikTok music
+  // separately.
+  if (
+    data.music &&
+    typeof data.music.url === "string"
+  ) {
+    sourceFormats.push(data.music);
   }
 
   const formats = sourceFormats
@@ -339,7 +507,8 @@ async function resolveTikTokWithSaveAPI(tiktokUrl) {
           : `Video ${index + 1}`);
 
       return {
-        url: item.url,
+        url:
+          item.url,
 
         format_id:
           item.format ||
@@ -370,6 +539,11 @@ async function resolveTikTokWithSaveAPI(tiktokUrl) {
               )
             : null,
 
+        filesize_str:
+          item.size_mb != null
+            ? `${item.size_mb} MB`
+            : "",
+
         vcodec:
           isAudio
             ? "none"
@@ -387,6 +561,17 @@ async function resolveTikTokWithSaveAPI(tiktokUrl) {
         label:
           String(label),
 
+        format:
+          item.format ||
+          "",
+
+        quality:
+          item.quality ||
+          "",
+
+        exact:
+          item.exact !== false,
+
         watermark:
           typeof item.watermark === "boolean"
             ? item.watermark
@@ -395,9 +580,13 @@ async function resolveTikTokWithSaveAPI(tiktokUrl) {
     });
 
   if (formats.length === 0) {
-    throw new Error(
-      "SaveAPI successfully resolved the TikTok URL but returned no downloadable media."
+    const error = new Error(
+      `SaveAPI successfully resolved the ${platform} URL but returned no downloadable media.`
     );
+
+    error.code = "MEDIA_NOT_FOUND";
+
+    throw error;
   }
 
   const meta = data.meta || {};
@@ -408,7 +597,7 @@ async function resolveTikTokWithSaveAPI(tiktokUrl) {
     title:
       meta.title ||
       meta.text ||
-      "TikTok Video",
+      `${platform} media`,
 
     uploader:
       meta.author ||
@@ -419,16 +608,25 @@ async function resolveTikTokWithSaveAPI(tiktokUrl) {
       "",
 
     duration:
-      safeNumber(meta.duration) || 0,
+      safeNumber(meta.duration) ||
+      0,
 
     webpage_url:
       data.source_url ||
-      tiktokUrl,
+      inputUrl,
 
     platform:
-      "TikTok",
+      data.platform ||
+      platform,
 
-    formats
+    type:
+      data.type ||
+      "",
+
+    formats,
+
+    medias:
+      formats
   };
 }
 
@@ -494,9 +692,7 @@ async function resolveYouTubeInfoWithSaveAPI(youtubeUrl) {
         "SaveAPI could not resolve this YouTube URL."
       );
 
-    const error = new Error(
-      errorMessage
-    );
+    const error = new Error(errorMessage);
 
     error.code = errorCode;
     error.httpStatus = response.status;
@@ -513,10 +709,6 @@ async function resolveYouTubeInfoWithSaveAPI(youtubeUrl) {
 
     throw error;
   }
-
-  // ------------------------------------------------
-  // Convert YouTube video formats
-  // ------------------------------------------------
 
   const videoFormats =
     Array.isArray(data.formats)
@@ -628,7 +820,8 @@ async function resolveYouTubeInfoWithSaveAPI(youtubeUrl) {
       "",
 
     duration:
-      safeNumber(data.duration_seconds) || 0,
+      safeNumber(data.duration_seconds) ||
+      0,
 
     duration_str:
       data.duration_str ||
@@ -650,8 +843,6 @@ async function resolveYouTubeInfoWithSaveAPI(youtubeUrl) {
 
     formats,
 
-    // Keep these separately available to the
-    // frontend if it wants to group them.
     video_formats:
       videoFormats.map(item => ({
         quality:
@@ -783,9 +974,7 @@ async function createYouTubeDownload(
         "SaveAPI could not create the selected YouTube download."
       );
 
-    const error = new Error(
-      errorMessage
-    );
+    const error = new Error(errorMessage);
 
     error.code = errorCode;
     error.httpStatus = response.status;
@@ -843,7 +1032,14 @@ async function createYouTubeDownload(
 }
 
 // --------------------------------------------------
-// yt-dlp - Non-TikTok / Non-YouTube platforms
+// yt-dlp resolver
+//
+// Used for:
+// Twitch
+// Vimeo
+// SoundCloud
+// Reddit
+// LinkedIn
 // --------------------------------------------------
 
 async function resolveWithYtDlp(inputUrl) {
@@ -1006,7 +1202,7 @@ async function resolveWithYtDlp(inputUrl) {
 
     title:
       data.title ||
-      "Video",
+      "Media",
 
     uploader:
       data.uploader ||
@@ -1047,7 +1243,22 @@ app.get("/", (req, res) => {
       "NetSaves API",
 
     message:
-      "NetSaves downloader backend is online."
+      "NetSaves downloader backend is online.",
+
+    platforms: [
+      "youtube",
+      "tiktok",
+      "twitch",
+      "instagram",
+      "twitter",
+      "pinterest",
+      "snapchat",
+      "vimeo",
+      "soundcloud",
+      "reddit",
+      "linkedin",
+      "facebook"
+    ]
   });
 });
 
@@ -1075,7 +1286,7 @@ app.get("/version", async (req, res) => {
         stdout.trim()
     });
 
-  } catch (error) {
+  } catch {
     res.status(500).json({
       status: "error",
 
@@ -1086,10 +1297,7 @@ app.get("/version", async (req, res) => {
 });
 
 // --------------------------------------------------
-// YouTube download creation endpoint
-//
-// Example:
-// /youtube/create?url=https%3A%2F%2Fyoutu.be%2FVIDEO&quality=720p
+// YouTube create
 // --------------------------------------------------
 
 app.get("/youtube/create", async (req, res) => {
@@ -1159,27 +1367,26 @@ app.get("/youtube/create", async (req, res) => {
       error.message
     );
 
-    const statusCode =
-      getSaveApiStatusCode(
-        error.code
-      );
+    return res
+      .status(
+        getSaveApiStatusCode(error.code)
+      )
+      .json({
+        status: "error",
 
-    return res.status(statusCode).json({
-      status: "error",
+        error:
+          error.message ||
+          "Unable to create the YouTube download.",
 
-      error:
-        error.message ||
-        "Unable to create the YouTube download.",
-
-      code:
-        error.code ||
-        "SAVEAPI_ERROR"
-    });
+        code:
+          error.code ||
+          "SAVEAPI_ERROR"
+      });
   }
 });
 
 // --------------------------------------------------
-// Main downloader endpoint
+// Main downloader
 // --------------------------------------------------
 
 app.get("/video", async (req, res) => {
@@ -1204,11 +1411,24 @@ app.get("/video", async (req, res) => {
     });
   }
 
+  const platform =
+    detectPlatform(inputUrl);
+
+  if (!platform) {
+    return res.status(400).json({
+      status: "error",
+
+      error:
+        "This platform is not currently supported by NetSaves."
+    });
+  }
+
   // ------------------------------------------------
-  // YouTube -> SaveAPI
+  // YouTube
   // ------------------------------------------------
 
-  if (isYouTubeUrl(inputUrl)) {
+  if (platform === "youtube") {
+
     if (!isSupportedYouTubeUrl(inputUrl)) {
       return res.status(400).json({
         status: "error",
@@ -1227,38 +1447,82 @@ app.get("/video", async (req, res) => {
 
     } catch (error) {
       console.error(
-        "SaveAPI YouTube info error:",
+        "YouTube info error:",
         error.code || "",
         error.message
       );
 
-      const statusCode =
-        getSaveApiStatusCode(
-          error.code
-        );
+      return res
+        .status(
+          getSaveApiStatusCode(error.code)
+        )
+        .json({
+          status: "error",
 
-      return res.status(statusCode).json({
-        status: "error",
+          error:
+            error.message ||
+            "Unable to process this YouTube URL.",
 
-        error:
-          error.message ||
-          "SaveAPI could not process this YouTube URL.",
-
-        code:
-          error.code ||
-          "SAVEAPI_ERROR"
-      });
+          code:
+            error.code ||
+            "SAVEAPI_ERROR"
+        });
     }
   }
 
   // ------------------------------------------------
-  // TikTok -> SaveAPI
+  // SaveAPI platforms
   // ------------------------------------------------
 
-  if (isTikTokUrl(inputUrl)) {
+  if (
+    SAVEAPI_PLATFORMS.includes(platform)
+  ) {
+
     try {
       const result =
-        await resolveTikTokWithSaveAPI(
+        await resolveWithSaveAPI(
+          inputUrl,
+          platform
+        );
+
+      return res.json(result);
+
+    } catch (error) {
+      console.error(
+        `SaveAPI ${platform} error:`,
+        error.code || "",
+        error.message
+      );
+
+      return res
+        .status(
+          getSaveApiStatusCode(error.code)
+        )
+        .json({
+          status: "error",
+
+          error:
+            error.message ||
+            `Unable to process this ${platform} URL.`,
+
+          code:
+            error.code ||
+            "SAVEAPI_ERROR"
+        });
+    }
+  }
+
+  // ------------------------------------------------
+  // yt-dlp platforms
+  // ------------------------------------------------
+
+  if (
+    YTDLP_PLATFORMS.includes(platform)
+  ) {
+
+    try {
+      const result =
+        await resolveWithYtDlp(
           inputUrl
         );
 
@@ -1266,83 +1530,26 @@ app.get("/video", async (req, res) => {
 
     } catch (error) {
       console.error(
-        "SaveAPI TikTok error:",
-        error.code || "",
+        `yt-dlp ${platform} error:`,
         error.message
       );
 
-      let statusCode = 502;
-
-      if (
-        error.code === "INVALID_URL" ||
-        error.code === "UNSUPPORTED_PLATFORM"
-      ) {
-        statusCode = 400;
-
-      } else if (
-        error.code === "MISSING_API_KEY" ||
-        error.code === "INVALID_API_KEY" ||
-        error.code === "KEY_REVOKED" ||
-        error.code === "KEY_EXPIRED"
-      ) {
-        statusCode = 500;
-
-      } else if (
-        error.code === "RATE_LIMITED" ||
-        error.code === "QUOTA_EXCEEDED"
-      ) {
-        statusCode = 429;
-
-      } else if (
-        error.code === "PRIVATE_CONTENT" ||
-        error.code === "MEDIA_NOT_FOUND"
-      ) {
-        statusCode = 404;
-      }
-
-      return res.status(statusCode).json({
+      return res.status(502).json({
         status: "error",
 
         error:
           error.message ||
-          "SaveAPI could not process this TikTok URL.",
-
-        code:
-          error.code ||
-          "SAVEAPI_ERROR"
+          `Unable to extract this ${platform} media.`
       });
     }
   }
 
-  // ------------------------------------------------
-  // Everything else -> yt-dlp
-  //
-  // This preserves Twitch and other existing
-  // downloader functionality.
-  // ------------------------------------------------
+  return res.status(400).json({
+    status: "error",
 
-  try {
-    const result =
-      await resolveWithYtDlp(
-        inputUrl
-      );
-
-    return res.json(result);
-
-  } catch (error) {
-    console.error(
-      "yt-dlp error:",
-      error.message
-    );
-
-    return res.status(502).json({
-      status: "error",
-
-      error:
-        error.message ||
-        "Unable to extract this video."
-    });
-  }
+    error:
+      "This platform is not currently configured."
+  });
 });
 
 // --------------------------------------------------
@@ -1376,7 +1583,7 @@ app.use((err, req, res, next) => {
 });
 
 // --------------------------------------------------
-// Start server
+// Start
 // --------------------------------------------------
 
 app.listen(
