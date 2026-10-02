@@ -583,27 +583,41 @@ app.get("/video", async (req, res) => {
 
       if (embed.success) {
 
-        const mediaUrls =
-          extractTikTokMediaUrls(
-            embed.html
-          );
+  const mediaUrls =
+    extractTikTokMediaUrls(
+      embed.html
+    );
 
+  if (
+    mediaUrls.length > 0
+  ) {
 
-        if (
-          mediaUrls.length > 0
-        ) {
+    return res.json(
+      buildTikTokFallbackResponse(
+        url,
+        videoId,
+        mediaUrls
+      )
+    );
 
-          return res.json(
-            buildTikTokFallbackResponse(
-              url,
-              videoId,
-              mediaUrls
-            )
-          );
+  }
 
-        }
+  return res.status(500).json({
+    status: "error",
+    error: "TikTok embed page was reached, but no downloadable media URL was found.",
+    embed_status: embed.status,
+    embed_url: embed.url,
+    embed_length: embed.html.length
+  });
 
-      }
+}
+
+return res.status(500).json({
+  status: "error",
+  error: "Could not retrieve the TikTok embed page.",
+  embed_status: embed.status || null,
+  embed_error: embed.error || null
+});
 
     }
 
